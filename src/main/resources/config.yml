@@ -1,0 +1,7 @@
+extended-worldedit:
+  enabled: true
+  debug: false
+  blocks-per-tick: 1000
+  millis-per-tick: 30
+  max-clipboard-blocks: 90000000000
+  max-history-blocks: 100000000000

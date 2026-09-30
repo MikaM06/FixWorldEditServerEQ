@@ -1,0 +1,15 @@
+name: FixWorldEditServerEQ
+main: fr.earthquest.fixworldedit.FixWorldEdit
+version: ${project.version}
+description: Correctif WorldEdit pour les IDs de blocs superieurs a 4095.
+depend: [WorldEdit]
+softdepend: [WorldGuard]
+authors: [MikaM06]
+commands:
+  qtundo:
+    description: Annule le dernier //paste ou //cut etendu depuis le journal disque.
+    permission: fixworldedit.qtundo
+permissions:
+  fixworldedit.qtundo:
+    description: Permet d'annuler un collage etendu avec /qtundo.
+    default: op
