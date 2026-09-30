@@ -19,6 +19,14 @@ public class FixWorldEdit extends JavaPlugin {
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
+        try {
+            Class.forName("com.sk89q.worldedit.world.World", false, plugin.getClass().getClassLoader());
+        } catch (ClassNotFoundException | LinkageError missing) {
+            getLogger().severe("WorldEdit 6 est requis, version trouvee : "
+                    + plugin.getDescription().getVersion() + ". Installez worldedit-bukkit 6.1.9.");
+            Bukkit.getPluginManager().disablePlugin(this);
+            return;
+        }
         if (!getConfig().getBoolean("extended-worldedit.enabled", true)) {
             getLogger().info("Correctif WorldEdit : desactive par la configuration (extended-worldedit.enabled).");
             return;
