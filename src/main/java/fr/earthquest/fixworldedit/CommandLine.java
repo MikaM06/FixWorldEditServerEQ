@@ -1,5 +1,8 @@
 package fr.earthquest.fixworldedit;
 
+import java.util.ArrayList;
+import java.util.List;
+
 final class CommandLine {
     private static final int MAX_DIGITS_IN_INT = 9;
 
@@ -98,5 +101,61 @@ final class CommandLine {
             }
         }
         return Integer.parseInt(text);
+    }
+
+    public List<BlockPatternEntry> parsePattern() {
+        if (arguments.isEmpty()) {
+            return null;
+        }
+
+        List<BlockPatternEntry> entries = new ArrayList<BlockPatternEntry>();
+        String[] parts = arguments.split(",");
+
+        for (String part : parts) {
+            part = part.trim();
+            if (part.isEmpty()) {
+                continue;
+            }
+
+
+            double weight = 1.0;
+            String blockPart = part;
+
+            if (part.contains("%")) {
+                String[] chanceSplit = part.split("%");
+                if (chanceSplit.length == 2) {
+                    try {
+                        weight = Double.parseDouble(chanceSplit[0]);
+                        blockPart = chanceSplit[1];
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            }
+
+            String idPart = blockPart;
+            int data = 0;
+            if (blockPart.contains(":")) {
+                String[] idSplit = blockPart.split(":");
+                idPart = idSplit[0];
+                try {
+                    data = Integer.parseInt(idSplit[1]);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+            int id = positiveInt(idPart);
+            if (id < 0) {
+                return null;
+            }
+            if (data < 0 || data > 15) {
+                return null;
+            }
+
+            entries.add(new BlockPatternEntry(id, (byte) data, weight));
+        }
+            return entries.isEmpty() ? null : entries;
     }
 }
