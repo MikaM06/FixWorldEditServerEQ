@@ -8,11 +8,9 @@ import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.bukkit.BukkitWorld;
 import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.sk89q.worldedit.regions.Region;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.UUID;
+
+import java.util.*;
+
 import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -36,6 +34,8 @@ public class ExtendedRegionListener implements Listener {
     private final BlockWriter writer;
     private final ExtendedLog log;
     private final Map<UUID, Job> jobs = new HashMap<UUID, Job>();
+
+
 
     public ExtendedRegionListener(Plugin plugin, WorldEditPlugin worldEdit, BuildGuard guard,
                                   ServerBlockRegistry registry, EditSessionSource editSessions) {
@@ -83,7 +83,7 @@ public class ExtendedRegionListener implements Listener {
         if (!command.is(SET) && !command.is(WALLS)) {
             return;
         }
-        if (!command.hasArguments() || !command.mentionsExtendedId()) {
+        if (!command.hasArguments()) {
             return;
         }
 
@@ -96,27 +96,29 @@ public class ExtendedRegionListener implements Listener {
         }
 
         event.setCancelled(true);
-        int[] block = command.parseIdAndData();
-        if (block == null) {
-            send(player, ChatColor.RED, "Un identifiant etendu s'emploie seul, sous la forme //"
-                    + (walls ? WALLS : SET) + " <id>[:data] ; les melanges et pourcentages ne sont pas repris.");
-            return;
-        }
-        int id = block[0];
-        byte data = (byte) block[1];
-        log.trace("Input", id, data);
 
-        if (isDisallowed(player, id)) {
-            send(player, ChatColor.RED, "Ce bloc figure parmi les blocs interdits par WorldEdit.");
+        List<BlockPatternEntry> pattern = command.parsePattern();
+        if (pattern == null) {
+            send(player, ChatColor.RED, "Format de pattern invalide. Exemple: //"
+                    + (walls ? WALLS : SET) + " 2397:3,1801,1802:14");
             return;
         }
+
+        for (BlockPatternEntry entry : pattern) {
+            log.trace("Input", entry.id, entry.data);
+            if (isDisallowed(player, entry.id)) {
+                send(player, ChatColor.RED, "Le bloc " + entry.id + " figure parmi les blocs interdits par WorldEdit.");
+                return;
+            }
+            if (!registry.isBlock(entry.id)) {
+                send(player, ChatColor.RED, "L'ID " + entry.id + " n'est pas un bloc de ce serveur.");
+                return;
+            }
+        }
+
         LocalSession session = worldEdit.getSession(player);
         if (session.getMask() != null) {
             send(player, ChatColor.RED, "Un masque global est actif ; retirez-le avec //gmask avant d'utiliser un ID etendu.");
-            return;
-        }
-        if (!registry.isBlock(id)) {
-            send(player, ChatColor.RED, "L'ID " + id + " n'est pas un bloc de ce serveur.");
             return;
         }
         if (running != null) {
@@ -138,7 +140,7 @@ public class ExtendedRegionListener implements Listener {
         int limit = session.getBlockChangeLimit();
         EditSession edit = editSessions.create(weWorld, limit);
 
-        Job job = new Job(player, session, world, weWorld, positions, id, data, permission, limit, edit);
+        Job job = new Job(player, session, world, weWorld, positions, pattern, permission, limit, edit);
         jobs.put(player.getUniqueId(), job);
         job.task = plugin.getServer().getScheduler().runTaskTimer(plugin, job, 1L, 1L);
     }
@@ -230,8 +232,9 @@ public class ExtendedRegionListener implements Listener {
         private final LocalSession session;
         private final World world;
         private final Iterator<BlockVector> positions;
-        private final int id;
-        private final byte data;
+        private final List<BlockPatternEntry> pattern;
+        private final Random random = new Random();
+        private final double totalWeight;
         private final String permission;
         private final int limit;
         private final EditSession edit;
@@ -242,17 +245,22 @@ public class ExtendedRegionListener implements Listener {
         private boolean done;
 
         Job(Player player, LocalSession session, World world, com.sk89q.worldedit.world.World weWorld,
-            Iterator<BlockVector> positions, int id, byte data, String permission, int limit, EditSession edit) {
+            Iterator<BlockVector> positions, List<BlockPatternEntry> pattern, String permission, int limit, EditSession edit) {
             this.player = player;
             this.session = session;
             this.world = world;
             this.positions = positions;
-            this.id = id;
-            this.data = data;
+            this.pattern = pattern;
             this.permission = permission;
             this.limit = limit;
             this.edit = edit;
             this.blocksPerTick = Math.max(1, plugin.getConfig().getInt("extended-worldedit.blocks-per-tick", 1000));
+
+            double sum = 0.0;
+            for (BlockPatternEntry entry : pattern) {
+                sum += entry.weight;
+            }
+            this.totalWeight = sum;
         }
 
         @Override
@@ -288,6 +296,11 @@ public class ExtendedRegionListener implements Listener {
             if (!writer.canBuild(player, block)) {
                 return;
             }
+
+            BlockPatternEntry chosen = getRandomEntry();
+            int id = chosen.id;
+            byte data = chosen.data;
+
             int previousId = writer.typeId(block);
             byte previousData = block.getData();
             if (previousId == id && previousData == data) {
@@ -300,6 +313,21 @@ public class ExtendedRegionListener implements Listener {
             edit.getChangeSet().add(new BukkitBlockChange(writer, player, world, x, y, z,
                     previousId, previousData, previousNbt, id, data));
             changed++;
+        }
+
+        private BlockPatternEntry getRandomEntry() {
+            if (pattern.size() == 1) {
+                return pattern.get(0);
+            }
+            double r = random.nextDouble() * totalWeight;
+            double current = 0.0;
+            for (BlockPatternEntry entry : pattern) {
+                current += entry.weight;
+                if (r <= current) {
+                    return entry;
+                }
+            }
+            return pattern.get(0);
         }
 
         @Override
@@ -319,7 +347,7 @@ public class ExtendedRegionListener implements Listener {
                 task.cancel();
             }
             jobs.remove(player.getUniqueId());
-            log.debug("Operation terminee : " + changed + " bloc(s) modifie(s) en ID " + id);
+            log.debug("Operation terminee : " + changed + " bloc(s) modifie(s).");
         }
     }
 }
